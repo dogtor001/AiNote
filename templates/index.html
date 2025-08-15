@@ -147,9 +147,6 @@
       transition: margin-left 0.3s ease;
     }
     
-    .sidebar.show ~ .main-content {
-      margin-left: 280px;
-    }
     
     .chat-header {
       padding: 20px;
@@ -395,10 +392,10 @@
       gap: 10px;
     }
     
-    .bottom-actions-left {
+    .floating-buttons {
       position: fixed;
-      left: 20px;
-      bottom: 20px;
+      right: 20px;
+      top: 20px;
       display: flex;
       gap: 10px;
       z-index: 1000;
@@ -540,6 +537,16 @@
         flex-direction: column;
       }
     }
+
+    @media (min-width: 901px) {
+      .sidebar {
+        position: relative;
+        transform: none;
+      }
+      .hamburger-button {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -597,8 +604,8 @@
   </div>
 
   <!-- 悬浮按钮 -->
-  <div class="bottom-actions-left">
-    <button class="icon-button" onclick="toggleSidebar()">☰</button>
+  <div class="floating-buttons">
+    <button class="icon-button hamburger-button" onclick="toggleSidebar()">☰</button>
     <button class="icon-button" onclick="createNewConversation()">+</button>
   </div>
 
@@ -621,64 +628,57 @@
     // 初始化
     document.addEventListener('DOMContentLoaded', async () => {
       await loadConversations();
-      // **需求3: 刷新后跳转到最新的聊天**
       if (conversations.length > 0) {
-        // 后端返回的列表已按更新时间倒序，第一个就是最新的
         const lastConversation = conversations[0];
         currentConversationId = lastConversation.id;
       } else {
-        // 如果没有对话，创建一个新的
-        await createNewConversation(false); // 创建但不切换
+        await createNewConversation(false);
       }
 
-      // 初始加载当前对话
       if (currentConversationId) {
         await loadCurrentConversation();
       }
 
       renderConversationsList();
-      updateSidebarVisibility();
       setupEventListeners();
+      checkLayout(); // Initial layout check
     });
 
     // 设置事件监听器
     function setupEventListeners() {
       sendButton.onclick = sendMessage;
 
-      // **需求2: 点击右边非侧边栏时，请让侧边栏隐藏**
       mainContent.addEventListener('click', () => {
-        if (sidebarVisible) {
+        if (window.innerWidth <= 900 && sidebarVisible) {
           sidebarVisible = false;
           updateSidebarVisibility();
         }
       });
 
-      // 回车发送，Ctrl+Enter 换行
+      window.addEventListener('resize', checkLayout);
+
       messageInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
-          if (!event.ctrlKey) {
-            event.preventDefault();
-            sendMessage();
-          }
+        if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+          event.preventDefault();
+          sendMessage();
         }
         if (event.key === 'Enter' && event.ctrlKey) {
           event.preventDefault();
           const start = messageInput.selectionStart;
           const end = messageInput.selectionEnd;
-          const value = messageInput.value;
-          messageInput.value = value.substring(0, start) + '\n' + value.substring(end);
+          messageInput.value = messageInput.value.substring(0, start) + '\n' + messageInput.value.substring(end);
           messageInput.selectionStart = messageInput.selectionEnd = start + 1;
           messageInput.dispatchEvent(new Event('input'));
         }
       });
 
-      // 标题编辑：失焦或回车时保存
       currentChatTitle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           currentChatTitle.blur();
         }
       });
+
       currentChatTitle.addEventListener('blur', async () => {
         const newTitle = currentChatTitle.textContent.trim();
         const current = conversations.find(c => c.id === currentConversationId);
@@ -689,34 +689,42 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: newTitle })
           });
-          const data = await resp.json();
-          if (data.success) {
-            await loadConversations(); // 重新加载以更新侧边栏标题
+          if (resp.ok) {
+            await loadConversations();
           } else {
-            alert('标题更新失败：' + (data.error || '未知错误'));
+            alert('标题更新失败');
             currentChatTitle.textContent = current.title;
           }
         } catch (e) {
-          console.error('更新标题失败', e);
-          alert('更新标题失败：' + e.message);
+          alert('更新标题失败: ' + e.message);
           currentChatTitle.textContent = current.title;
         }
       });
 
-      // 自动调整输入框高度
       messageInput.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 200) + 'px';
       });
     }
-    
-    // 切换侧边栏显示/隐藏
+
+    // 响应式布局检查
+    function checkLayout() {
+      const isWide = window.innerWidth > 900;
+      if (isWide) {
+        sidebarVisible = true;
+        updateSidebarVisibility();
+      }
+      // On narrow screens, we let the user control the visibility.
+    }
+
+    // 切换侧边栏
     function toggleSidebar() {
+      if (window.innerWidth > 900) return; // Disabled on wide screens
       sidebarVisible = !sidebarVisible;
       updateSidebarVisibility();
     }
 
-    // 更新侧边栏显示状态
+    // 更新侧边栏DOM
     function updateSidebarVisibility() {
       if (sidebarVisible) {
         sidebar.classList.add('show');
@@ -768,7 +776,7 @@
       await loadCurrentConversation();
     }
 
-    // 加载当前对话内容
+    // 加载当前对话
     async function loadCurrentConversation() {
       if (!currentConversationId) {
         chatContainer.innerHTML = '<div class="loading-indicator">没有选择对话</div>';
@@ -796,7 +804,7 @@
           body: JSON.stringify({ title: '' })
         });
         const newConversation = await response.json();
-        await loadConversations(); // 重新加载列表以包含新对话
+        await loadConversations();
         if (switchToNew) {
           currentConversationId = newConversation.id;
           renderConversationsList();
@@ -817,22 +825,20 @@
     async function deleteConversation(conversationId, event) {
       event.stopPropagation();
       if (!confirm('确定要删除这个对话吗？此操作不可恢复！')) return;
-
       try {
         const response = await fetch(`/api/conversations/${conversationId}`, { method: 'DELETE' });
         if (response.ok) {
           const deletedIndex = conversations.findIndex(c => c.id === conversationId);
-          await loadConversations(); // 重新加载列表
-
+          await loadConversations();
           if (conversationId === currentConversationId) {
             if (conversations.length > 0) {
-              // 切换到相邻的对话或最新的对话
               const newIndex = Math.max(0, deletedIndex - 1);
               currentConversationId = conversations[newIndex].id;
-              await loadCurrentConversation();
             } else {
-              await createNewConversation(); // 如果全删光了就新建一个
+              await createNewConversation();
+              return; // createNewConversation will handle the reload
             }
+            await loadCurrentConversation();
           }
         }
       } catch (error) {
@@ -840,59 +846,28 @@
       }
     }
 
-    // **需求1: ”清除上下文“分界线永远显示在底部是不对的...**
-    // 渲染消息，并根据 context_start_message_id 插入分隔线
+    // 渲染消息
     function renderMessages(messages, contextStartId) {
       chatContainer.innerHTML = '';
-      let dividerInserted = false;
-      
       messages.forEach(message => {
         addMessageToChat(message.role, message.content, message.time, message.id, message.model, currentConversationId);
-
-        // 如果当前消息是上下文的起点，在其后插入分隔线
         if (contextStartId && message.id === contextStartId) {
           const divider = document.createElement('div');
           divider.className = 'context-divider';
           divider.innerHTML = '<div class="divider-line"></div><div class="divider-text">上下文已清除</div>';
           chatContainer.appendChild(divider);
-          dividerInserted = true;
         }
       });
-      
-      // 如果有新的聊天记录，确保分隔线在新聊天上面
-      if (dividerInserted) {
-        // 将分隔线之后的所有消息移到分隔线之后
-        const divider = chatContainer.querySelector('.context-divider');
-        const allMessages = Array.from(chatContainer.querySelectorAll('.message'));
-        const contextStartIndex = messages.findIndex(m => m.id === contextStartId);
-
-        if (divider && contextStartIndex !== -1) {
-          // 清空容器，按正确顺序重新插入
-          chatContainer.innerHTML = '';
-          for(let i=0; i <= contextStartIndex; i++) {
-            chatContainer.appendChild(allMessages[i]);
-          }
-          chatContainer.appendChild(divider);
-          for(let i = contextStartIndex + 1; i < allMessages.length; i++) {
-            chatContainer.appendChild(allMessages[i]);
-          }
-        }
-      }
-
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     
-    // **需求4: AI来回复后，不要把回复放到我当前对话里**
-    // 添加消息到聊天区域，增加 conversationId 参数以确认是否渲染
+    // 添加消息到UI
     function addMessageToChat(role, content, time, messageId, model, conversationId) {
-      // 只有当消息所属的对话是当前打开的对话时，才在界面上渲染
-      if (conversationId !== currentConversationId) {
-        return;
-      }
+      if (conversationId !== currentConversationId) return;
 
       const messageDiv = document.createElement('div');
       messageDiv.className = `message ${role}`;
-      messageDiv.dataset.messageId = messageId; // 便于查找
+      messageDiv.dataset.messageId = messageId;
 
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
@@ -960,7 +935,7 @@
       if (!message) return;
       
       const model = modelSelector.value;
-      const conversationIdForRequest = currentConversationId; // **需求4** 捕获当前对话ID
+      const conversationIdForRequest = currentConversationId;
 
       messageInput.value = '';
       messageInput.dispatchEvent(new Event('input'));
@@ -968,9 +943,6 @@
       sendButton.textContent = '发送中...';
 
       try {
-        // 乐观地先显示用户消息
-        // addMessageToChat('user', message, new Date().toISOString(), -1, model, conversationIdForRequest);
-
         const response = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -983,17 +955,13 @@
         
         if (response.ok) {
           const data = await response.json();
-          // 后端返回后，用真实数据添加用户和AI消息
           addMessageToChat('user', message, new Date().toISOString(), data.user_id, model, conversationIdForRequest);
           addMessageToChat('assistant', data.response, data.time, data.id, data.model, conversationIdForRequest);
-          
-          // 不论用户是否切换页面，都更新侧边栏状态
           await loadConversations();
         } else {
           addMessageToChat('assistant', '发送失败，请重试', new Date().toISOString(), -1, model, conversationIdForRequest);
         }
       } catch (error) {
-        console.error('发送消息失败:', error);
         addMessageToChat('assistant', '网络错误: ' + error.message, new Date().toISOString(), -1, model, conversationIdForRequest);
       } finally {
         sendButton.disabled = false;
@@ -1002,21 +970,19 @@
       }
     }
 
-    // 清除上下文
+    // 清除上下文 (无确认)
     async function clearContext() {
-      if (!confirm('确定要清除这个对话的上下文记忆吗？')) return;
       try {
         const response = await fetch(`/api/conversations/${currentConversationId}/clear-context`, {
           method: 'POST'
         });
         if (response.ok) {
-          await loadConversations(); // 重新加载对话列表以获取新的 context_start_message_id
-          await loadCurrentConversation(); // 重新渲染当前对话
+          await loadConversations();
+          await loadCurrentConversation();
         } else {
           alert('清除上下文失败');
         }
       } catch (error) {
-        console.error('清除上下文失败:', error);
         alert('清除上下文失败: ' + error.message);
       }
     }
@@ -1031,7 +997,7 @@
         const data = await resp.json();
         if (data.success) {
           bubbleElement.textContent = data.response;
-          await loadConversations(); // 更新时间
+          await loadConversations();
         } else {
           alert('重新生成失败：' + (data.error || '未知错误'));
         }
@@ -1063,9 +1029,9 @@
          if (data.success) {
            bubbleElement.textContent = data.user.content;
            if (data.assistant) {
-             await loadCurrentConversation(); // 如果助手回复也变了，就重载整个对话
+             await loadCurrentConversation();
            }
-           await loadConversations(); // 更新时间
+           await loadConversations();
          } else {
            alert('保存失败：' + (data.error || '未知错误'));
          }
@@ -1083,7 +1049,7 @@
         const response = await fetch(`/delete_message/${messageId}`, { method: 'POST' });
         if (response.ok) {
           messageElement.remove();
-          await loadConversations(); // 更新消息数
+          await loadConversations();
         }
       } catch (error) {
         alert('删除失败: ' + error.message);
