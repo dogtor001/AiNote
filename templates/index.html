@@ -604,11 +604,10 @@
 
   <script>
     // 全局变量
-    let currentConversationId = 1;
+    let currentConversationId = null;
     let conversations = [];
     let sidebarVisible = false;
-    let contextDivider = null;
-    
+
     // DOM 元素
     const conversationsList = document.getElementById('conversationsList');
     const chatContainer = document.getElementById('chatContainer');
@@ -617,20 +616,106 @@
     const modelSelector = document.getElementById('modelSelector');
     const currentChatTitle = document.getElementById('currentChatTitle');
     const sidebar = document.getElementById('sidebar');
-    
+    const mainContent = document.querySelector('.main-content');
+
     // 初始化
-    document.addEventListener('DOMContentLoaded', () => {
-      loadConversations();
-      loadCurrentConversation();
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadConversations();
+      // **需求3: 刷新后跳转到最新的聊天**
+      if (conversations.length > 0) {
+        // 后端返回的列表已按更新时间倒序，第一个就是最新的
+        const lastConversation = conversations[0];
+        currentConversationId = lastConversation.id;
+      } else {
+        // 如果没有对话，创建一个新的
+        await createNewConversation(false); // 创建但不切换
+      }
+
+      // 初始加载当前对话
+      if (currentConversationId) {
+        await loadCurrentConversation();
+      }
+
+      renderConversationsList();
       updateSidebarVisibility();
+      setupEventListeners();
     });
+
+    // 设置事件监听器
+    function setupEventListeners() {
+      sendButton.onclick = sendMessage;
+
+      // **需求2: 点击右边非侧边栏时，请让侧边栏隐藏**
+      mainContent.addEventListener('click', () => {
+        if (sidebarVisible) {
+          sidebarVisible = false;
+          updateSidebarVisibility();
+        }
+      });
+
+      // 回车发送，Ctrl+Enter 换行
+      messageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          if (!event.ctrlKey) {
+            event.preventDefault();
+            sendMessage();
+          }
+        }
+        if (event.key === 'Enter' && event.ctrlKey) {
+          event.preventDefault();
+          const start = messageInput.selectionStart;
+          const end = messageInput.selectionEnd;
+          const value = messageInput.value;
+          messageInput.value = value.substring(0, start) + '\n' + value.substring(end);
+          messageInput.selectionStart = messageInput.selectionEnd = start + 1;
+          messageInput.dispatchEvent(new Event('input'));
+        }
+      });
+
+      // 标题编辑：失焦或回车时保存
+      currentChatTitle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          currentChatTitle.blur();
+        }
+      });
+      currentChatTitle.addEventListener('blur', async () => {
+        const newTitle = currentChatTitle.textContent.trim();
+        const current = conversations.find(c => c.id === currentConversationId);
+        if (!current || !newTitle || newTitle === current.title) return;
+        try {
+          const resp = await fetch(`/api/conversations/${currentConversationId}/title`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            await loadConversations(); // 重新加载以更新侧边栏标题
+          } else {
+            alert('标题更新失败：' + (data.error || '未知错误'));
+            currentChatTitle.textContent = current.title;
+          }
+        } catch (e) {
+          console.error('更新标题失败', e);
+          alert('更新标题失败：' + e.message);
+          currentChatTitle.textContent = current.title;
+        }
+      });
+
+      // 自动调整输入框高度
+      messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+      });
+    }
     
     // 切换侧边栏显示/隐藏
     function toggleSidebar() {
       sidebarVisible = !sidebarVisible;
       updateSidebarVisibility();
     }
-    
+
     // 更新侧边栏显示状态
     function updateSidebarVisibility() {
       if (sidebarVisible) {
@@ -639,7 +724,7 @@
         sidebar.classList.remove('show');
       }
     }
-    
+
     // 加载对话列表
     async function loadConversations() {
       try {
@@ -650,178 +735,185 @@
         console.error('加载对话列表失败:', error);
       }
     }
-    
+
     // 渲染对话列表
     function renderConversationsList() {
       conversationsList.innerHTML = '';
-      
       conversations.forEach(conversation => {
         const item = document.createElement('div');
         item.className = `conversation-item ${conversation.id === currentConversationId ? 'active' : ''}`;
         item.onclick = () => {
           switchConversation(conversation.id);
-          // 在移动端切换对话后自动关闭侧边栏
           if (window.innerWidth <= 900) {
             sidebarVisible = false;
             updateSidebarVisibility();
           }
         };
-        
         item.innerHTML = `
           <div class="conversation-title">${conversation.title}</div>
           <div class="conversation-meta">
             <span>${conversation.message_count} 条消息</span>
-            <button class="delete-conversation" onclick="deleteConversation(${conversation.id}, event)">
-              ×
-            </button>
+            <button class="delete-conversation" onclick="deleteConversation(${conversation.id}, event)">×</button>
           </div>
         `;
-        
         conversationsList.appendChild(item);
       });
     }
-    
+
     // 切换对话
     async function switchConversation(conversationId) {
+      if (currentConversationId === conversationId) return;
       currentConversationId = conversationId;
       renderConversationsList();
       await loadCurrentConversation();
     }
-    
-    // 加载当前对话
+
+    // 加载当前对话内容
     async function loadCurrentConversation() {
+      if (!currentConversationId) {
+        chatContainer.innerHTML = '<div class="loading-indicator">没有选择对话</div>';
+        return;
+      }
       try {
         const response = await fetch(`/api/conversations/${currentConversationId}/messages`);
         const messages = await response.json();
-        
-        // 更新标题
         const conversation = conversations.find(c => c.id === currentConversationId);
         if (conversation) {
           currentChatTitle.textContent = conversation.title;
-        }
-        
-        renderMessages(messages);
-        
-        // 如果存在上下文分隔线，保留它
-        if (contextDivider) {
-          chatContainer.appendChild(contextDivider);
+          renderMessages(messages, conversation.context_start_message_id);
         }
       } catch (error) {
         console.error('加载对话失败:', error);
       }
     }
-    
+
     // 创建新对话
-    async function createNewConversation() {
+    async function createNewConversation(switchToNew = true) {
       try {
         const response = await fetch('/api/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: '' })
         });
-        
         const newConversation = await response.json();
-        currentConversationId = newConversation.id;
-        
-        await loadConversations();
-        chatContainer.innerHTML = '';
-        currentChatTitle.textContent = conversations.find(c => c.id === currentConversationId)?.title || '';
-        messageInput.focus();
-        
-        // 重置上下文分隔线
-        contextDivider = null;
-        
-        // 在移动端创建新对话后自动关闭侧边栏
-        if (window.innerWidth <= 900) {
-          sidebarVisible = false;
-          updateSidebarVisibility();
+        await loadConversations(); // 重新加载列表以包含新对话
+        if (switchToNew) {
+          currentConversationId = newConversation.id;
+          renderConversationsList();
+          await loadCurrentConversation();
+          messageInput.focus();
+          if (window.innerWidth <= 900) {
+            sidebarVisible = false;
+            updateSidebarVisibility();
+          }
         }
+        return newConversation;
       } catch (error) {
         console.error('创建对话失败:', error);
       }
     }
-    
+
     // 删除对话
     async function deleteConversation(conversationId, event) {
       event.stopPropagation();
-      
-      if (!confirm('确定要删除这个对话吗？此操作不可恢复！')) {
-        return;
-      }
-      
+      if (!confirm('确定要删除这个对话吗？此操作不可恢复！')) return;
+
       try {
-        const response = await fetch(`/api/conversations/${conversationId}`, {
-          method: 'DELETE'
-        });
-        
+        const response = await fetch(`/api/conversations/${conversationId}`, { method: 'DELETE' });
         if (response.ok) {
+          const deletedIndex = conversations.findIndex(c => c.id === conversationId);
+          await loadConversations(); // 重新加载列表
+
           if (conversationId === currentConversationId) {
-            // 如果删除的是当前对话，切换到第一个对话
-            await loadConversations();
             if (conversations.length > 0) {
-              currentConversationId = conversations[0].id;
+              // 切换到相邻的对话或最新的对话
+              const newIndex = Math.max(0, deletedIndex - 1);
+              currentConversationId = conversations[newIndex].id;
               await loadCurrentConversation();
             } else {
-              // 如果没有对话了，创建新对话
-              await createNewConversation();
+              await createNewConversation(); // 如果全删光了就新建一个
             }
-          } else {
-            await loadConversations();
           }
         }
       } catch (error) {
         console.error('删除对话失败:', error);
       }
     }
-    
-    // 渲染消息
-    function renderMessages(messages) {
-      // 保留上下文分隔线
-      const existingDivider = chatContainer.querySelector('.context-divider');
-      if (existingDivider) {
-        contextDivider = existingDivider;
-      }
-      
+
+    // **需求1: ”清除上下文“分界线永远显示在底部是不对的...**
+    // 渲染消息，并根据 context_start_message_id 插入分隔线
+    function renderMessages(messages, contextStartId) {
       chatContainer.innerHTML = '';
-      
-      // 如果有上下文分隔线，先添加它
-      if (contextDivider) {
-        chatContainer.appendChild(contextDivider);
-      }
+      let dividerInserted = false;
       
       messages.forEach(message => {
-        addMessageToChat(message.role, message.content, message.time, message.id, message.model);
+        addMessageToChat(message.role, message.content, message.time, message.id, message.model, currentConversationId);
+
+        // 如果当前消息是上下文的起点，在其后插入分隔线
+        if (contextStartId && message.id === contextStartId) {
+          const divider = document.createElement('div');
+          divider.className = 'context-divider';
+          divider.innerHTML = '<div class="divider-line"></div><div class="divider-text">上下文已清除</div>';
+          chatContainer.appendChild(divider);
+          dividerInserted = true;
+        }
       });
       
+      // 如果有新的聊天记录，确保分隔线在新聊天上面
+      if (dividerInserted) {
+        // 将分隔线之后的所有消息移到分隔线之后
+        const divider = chatContainer.querySelector('.context-divider');
+        const allMessages = Array.from(chatContainer.querySelectorAll('.message'));
+        const contextStartIndex = messages.findIndex(m => m.id === contextStartId);
+
+        if (divider && contextStartIndex !== -1) {
+          // 清空容器，按正确顺序重新插入
+          chatContainer.innerHTML = '';
+          for(let i=0; i <= contextStartIndex; i++) {
+            chatContainer.appendChild(allMessages[i]);
+          }
+          chatContainer.appendChild(divider);
+          for(let i = contextStartIndex + 1; i < allMessages.length; i++) {
+            chatContainer.appendChild(allMessages[i]);
+          }
+        }
+      }
+
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     
-    // 添加消息到聊天区域
-    function addMessageToChat(role, content, time, messageId, model) {
+    // **需求4: AI来回复后，不要把回复放到我当前对话里**
+    // 添加消息到聊天区域，增加 conversationId 参数以确认是否渲染
+    function addMessageToChat(role, content, time, messageId, model, conversationId) {
+      // 只有当消息所属的对话是当前打开的对话时，才在界面上渲染
+      if (conversationId !== currentConversationId) {
+        return;
+      }
+
       const messageDiv = document.createElement('div');
       messageDiv.className = `message ${role}`;
-      
+      messageDiv.dataset.messageId = messageId; // 便于查找
+
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
       avatar.textContent = role === 'user' ? '你' : 'AI';
-      
+
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
-      
+
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
       bubble.textContent = content;
-      
+
       const infoDiv = document.createElement('div');
       infoDiv.className = 'message-info';
-      
+
       if (time) {
         const timeSpan = document.createElement('span');
         timeSpan.className = 'message-time';
         timeSpan.textContent = formatTime(time);
         infoDiv.appendChild(timeSpan);
       }
-      
       if (model && role === 'assistant') {
         const modelSpan = document.createElement('span');
         modelSpan.className = 'message-model';
@@ -829,83 +921,23 @@
         infoDiv.appendChild(modelSpan);
       }
       
-      // 操作按钮容器
       const actions = document.createElement('span');
       actions.className = 'message-actions';
-      
       if (role === 'assistant') {
         const regenBtn = document.createElement('button');
         regenBtn.className = 'action-button';
         regenBtn.textContent = '重新生成';
-        regenBtn.onclick = async () => {
-          try {
-            regenBtn.disabled = true;
-            regenBtn.textContent = '生成中...';
-            const resp = await fetch(`/api/messages/${messageId}/regenerate`, { method: 'POST' });
-            const data = await resp.json();
-            if (data.success) {
-              bubble.textContent = data.response;
-              // 重新加载对话列表以更新消息数量与时间
-              await loadConversations();
-            } else {
-              alert('重新生成失败：' + (data.error || '未知错误'));
-            }
-          } catch (e) {
-            console.error('重新生成失败', e);
-            alert('重新生成失败：' + e.message);
-          } finally {
-            regenBtn.disabled = false;
-            regenBtn.textContent = '重新生成';
-          }
-        };
+        regenBtn.onclick = () => regenerateAssistantMessage(messageId, bubble);
         actions.appendChild(regenBtn);
       }
-      
       if (role === 'user') {
         const editBtn = document.createElement('button');
         editBtn.className = 'action-button';
         editBtn.textContent = '编辑';
-        editBtn.onclick = async () => {
-          const original = bubble.textContent;
-          const edited = prompt('编辑你的消息：', original);
-          if (edited == null) return; // 取消
-          const newText = edited.trim();
-          if (!newText) {
-            alert('内容不能为空');
-            return;
-          }
-          try {
-            editBtn.disabled = true;
-            editBtn.textContent = '保存中...';
-            const resp = await fetch(`/api/messages/${messageId}/edit`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: newText })
-            });
-            const data = await resp.json();
-            if (data.success) {
-              // 更新本条用户消息
-              bubble.textContent = data.user.content;
-              // 如果返回了助手的更新，重新加载当前会话
-              if (data.assistant) {
-                await loadCurrentConversation();
-              }
-              await loadConversations();
-            } else {
-              alert('保存失败：' + (data.error || '未知错误'));
-            }
-          } catch (e) {
-            console.error('编辑失败', e);
-            alert('编辑失败：' + e.message);
-          } finally {
-            editBtn.disabled = false;
-            editBtn.textContent = '编辑';
-          }
-        };
+        editBtn.onclick = () => editUserMessage(messageId, bubble);
         actions.appendChild(editBtn);
       }
       
-      // 删除按钮
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'delete-message';
       deleteBtn.textContent = '删除';
@@ -913,110 +945,151 @@
       
       infoDiv.appendChild(actions);
       infoDiv.appendChild(deleteBtn);
-      
       contentDiv.appendChild(bubble);
       contentDiv.appendChild(infoDiv);
-      
       messageDiv.appendChild(avatar);
       messageDiv.appendChild(contentDiv);
       
       chatContainer.appendChild(messageDiv);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
     }
-    
-    // 删除消息
-    async function deleteMessage(messageId, messageElement) {
-      if (!confirm('确定要删除这条消息吗？')) {
-        return;
-      }
-      
-      try {
-        const response = await fetch(`/delete_message/${messageId}`, {
-          method: 'POST'
-        });
-        
-        if (response.ok) {
-          messageElement.remove();
-        }
-      } catch (error) {
-        console.error('删除消息失败:', error);
-        alert('删除失败: ' + error.message);
-      }
-    }
-    
+
     // 发送消息
     async function sendMessage() {
       const message = messageInput.value.trim();
       if (!message) return;
       
       const model = modelSelector.value;
-      
-      // 先清空并禁用，避免重复提交
+      const conversationIdForRequest = currentConversationId; // **需求4** 捕获当前对话ID
+
       messageInput.value = '';
       messageInput.dispatchEvent(new Event('input'));
       sendButton.disabled = true;
       sendButton.textContent = '发送中...';
-      
+
       try {
+        // 乐观地先显示用户消息
+        // addMessageToChat('user', message, new Date().toISOString(), -1, model, conversationIdForRequest);
+
         const response = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: message,
             model: model,
-            conversation_id: currentConversationId
+            conversation_id: conversationIdForRequest
           })
         });
         
         if (response.ok) {
           const data = await response.json();
-          // 使用返回的真实 user_id/assistant id 渲染，保证"编辑/重新生成"有正确的 messageId
-          addMessageToChat('user', message, new Date().toISOString(), data.user_id, model);
-          addMessageToChat('assistant', data.response, data.time, data.id, data.model);
+          // 后端返回后，用真实数据添加用户和AI消息
+          addMessageToChat('user', message, new Date().toISOString(), data.user_id, model, conversationIdForRequest);
+          addMessageToChat('assistant', data.response, data.time, data.id, data.model, conversationIdForRequest);
           
+          // 不论用户是否切换页面，都更新侧边栏状态
           await loadConversations();
         } else {
-          addMessageToChat('assistant', '发送失败，请重试', new Date().toISOString());
+          addMessageToChat('assistant', '发送失败，请重试', new Date().toISOString(), -1, model, conversationIdForRequest);
         }
       } catch (error) {
         console.error('发送消息失败:', error);
-        addMessageToChat('assistant', '网络错误: ' + error.message, new Date().toISOString());
+        addMessageToChat('assistant', '网络错误: ' + error.message, new Date().toISOString(), -1, model, conversationIdForRequest);
       } finally {
         sendButton.disabled = false;
         sendButton.textContent = '发送';
         messageInput.focus();
       }
     }
-    
+
     // 清除上下文
     async function clearContext() {
+      if (!confirm('确定要清除这个对话的上下文记忆吗？')) return;
       try {
         const response = await fetch(`/api/conversations/${currentConversationId}/clear-context`, {
           method: 'POST'
         });
-        
-        let ok = response.ok;
-        let data = null;
-        try { data = await response.json(); } catch (_) { data = null; }
-        
-        if (ok && (!data || data.success !== false)) {
-          // 创建上下文分隔线
-          contextDivider = document.createElement('div');
-          contextDivider.className = 'context-divider';
-          contextDivider.innerHTML = '<div class="divider-line"></div><div class="divider-text">上下文已清除</div>';
-          
-          // 重新加载消息
-          await loadCurrentConversation();
+        if (response.ok) {
+          await loadConversations(); // 重新加载对话列表以获取新的 context_start_message_id
+          await loadCurrentConversation(); // 重新渲染当前对话
         } else {
-          const msg = (data && data.error) ? data.error : `HTTP ${response.status}`;
-          alert('清除上下文失败：' + msg);
+          alert('清除上下文失败');
         }
       } catch (error) {
         console.error('清除上下文失败:', error);
-        alert('清除上下文失败：' + error.message);
+        alert('清除上下文失败: ' + error.message);
       }
     }
-    
-    // 格式化时间
+
+    // 其他辅助函数...
+    async function regenerateAssistantMessage(messageId, bubbleElement) {
+      const regenBtn = bubbleElement.closest('.message-content').querySelector('.action-button');
+      try {
+        regenBtn.disabled = true;
+        regenBtn.textContent = '生成中...';
+        const resp = await fetch(`/api/messages/${messageId}/regenerate`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+          bubbleElement.textContent = data.response;
+          await loadConversations(); // 更新时间
+        } else {
+          alert('重新生成失败：' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('重新生成失败：' + e.message);
+      } finally {
+        regenBtn.disabled = false;
+        regenBtn.textContent = '重新生成';
+      }
+    }
+
+    async function editUserMessage(messageId, bubbleElement) {
+       const editBtn = bubbleElement.closest('.message-content').querySelector('.action-button');
+       const original = bubbleElement.textContent;
+       const edited = prompt('编辑你的消息：', original);
+       if (edited === null || edited.trim() === original) return;
+       const newText = edited.trim();
+       if (!newText) { alert('内容不能为空'); return; }
+
+       try {
+         editBtn.disabled = true;
+         editBtn.textContent = '保存中...';
+         const resp = await fetch(`/api/messages/${messageId}/edit`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ content: newText })
+         });
+         const data = await resp.json();
+         if (data.success) {
+           bubbleElement.textContent = data.user.content;
+           if (data.assistant) {
+             await loadCurrentConversation(); // 如果助手回复也变了，就重载整个对话
+           }
+           await loadConversations(); // 更新时间
+         } else {
+           alert('保存失败：' + (data.error || '未知错误'));
+         }
+       } catch (e) {
+         alert('编辑失败：' + e.message);
+       } finally {
+         editBtn.disabled = false;
+         editBtn.textContent = '编辑';
+       }
+    }
+
+    async function deleteMessage(messageId, messageElement) {
+      if (!confirm('确定要删除这条消息吗？')) return;
+      try {
+        const response = await fetch(`/delete_message/${messageId}`, { method: 'POST' });
+        if (response.ok) {
+          messageElement.remove();
+          await loadConversations(); // 更新消息数
+        }
+      } catch (error) {
+        alert('删除失败: ' + error.message);
+      }
+    }
+
     function formatTime(timestamp) {
       if (!timestamp) return '';
       const date = new Date(timestamp);
@@ -1027,65 +1100,6 @@
         minute: '2-digit'
       });
     }
-    
-    // 事件监听器
-    sendButton.onclick = sendMessage;
-    
-    // 回车发送，Ctrl+Enter 换行
-    messageInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        if (!event.ctrlKey) {
-          event.preventDefault();
-          sendMessage();
-        }
-      }
-      if (event.key === 'Enter' && event.ctrlKey) {
-        event.preventDefault();
-        const start = messageInput.selectionStart;
-        const end = messageInput.selectionEnd;
-        const value = messageInput.value;
-        messageInput.value = value.substring(0, start) + '\n' + value.substring(end);
-        messageInput.selectionStart = messageInput.selectionEnd = start + 1;
-        messageInput.dispatchEvent(new Event('input'));
-      }
-    });
-    
-    // 标题编辑：失焦或回车时保存
-    currentChatTitle.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        currentChatTitle.blur();
-      }
-    });
-    currentChatTitle.addEventListener('blur', async () => {
-      const newTitle = currentChatTitle.textContent.trim();
-      const current = conversations.find(c => c.id === currentConversationId);
-      if (!current || !newTitle || newTitle === current.title) return;
-      try {
-        const resp = await fetch(`/api/conversations/${currentConversationId}/title`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle })
-        });
-        const data = await resp.json();
-        if (data.success) {
-          await loadConversations();
-        } else {
-          alert('标题更新失败：' + (data.error || '未知错误'));
-          currentChatTitle.textContent = current.title;
-        }
-      } catch (e) {
-        console.error('更新标题失败', e);
-        alert('更新标题失败：' + e.message);
-        currentChatTitle.textContent = current.title;
-      }
-    });
-    
-    // 自动调整输入框高度
-    messageInput.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 200) + 'px';
-    });
   </script>
 </body>
 </html>
