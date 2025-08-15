@@ -43,7 +43,7 @@ pip install Flask
 
 ```python
 # 硅基流动 API 配置
-SILICON_API_KEY = 'sk-eeliptsdkjphaujddwpsxoiiyxcehklkdchbvnciemiiuxlb'  # 直接写死
+SILICON_API_KEY = 'sk-'  # 直接写死
 ```
 
 请将 `'sk-...'` 这个字符串替换为您自己的真实 API 密钥。
