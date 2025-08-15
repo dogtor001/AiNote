@@ -230,7 +230,8 @@ def get_conversations():
     c = conn.cursor()
     c.execute("""
         SELECT c.id, c.title, c.created_at, c.updated_at,
-               COUNT(m.id) as message_count
+               COUNT(m.id) as message_count,
+               c.context_start_message_id
         FROM conversations c
         LEFT JOIN messages m ON c.id = m.conversation_id
         GROUP BY c.id
@@ -246,7 +247,8 @@ def get_conversations():
             "title": row[1],
             "created_at": row[2],
             "updated_at": row[3],
-            "message_count": row[4]
+            "message_count": row[4],
+            "context_start_message_id": row[5]
         })
     return conversations
 
