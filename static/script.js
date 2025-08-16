@@ -391,6 +391,9 @@ async function sendMessage() {
       addMessageToChat('user', message, new Date().toISOString(), data.user_id, model, conversationIdForRequest);
       addMessageToChat('assistant', data.response, data.time, data.id, data.model, conversationIdForRequest);
 
+      // 发送消息后，确保“清除上下文”按钮可见
+      document.getElementById('clearContextWrapper').style.display = 'block';
+
       try {
         new Audio('https://cdn.jsdelivr.net/npm/sound-effects/sounds/mp3/ting.mp3').play();
       } catch (e) {
