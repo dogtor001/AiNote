@@ -142,34 +142,24 @@ body {
   min-width: 0;
   height: var(--app-height); /* Ensure it takes full viewport height */
   transition: margin-left 0.3s ease;
-  position: relative; /* Establish stacking context */
-  z-index: 1; /* Ensure it's below the sidebar */
 }
 
 
 .chat-header {
-  padding: 10px 20px; /* Reduced padding for a shorter header */
+  padding: 20px;
   border-bottom: 1px solid #333;
   background: #1a1a1a;
   display: flex;
   justify-content: space-between;
-  align-items: center; /* Center items vertically */
-  gap: 15px;
+  align-items: flex-start;
 }
 
-.header-left-buttons, .header-right-buttons {
+.chat-header-left {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 1 auto; /* Don't grow, shrink if needed, base on content */
-}
-
-.header-center-title {
-  flex: 1 1 0; /* Grow and shrink to take available space */
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
 }
 
 .chat-title {
@@ -439,7 +429,14 @@ body {
   gap: 10px;
 }
 
-/* .floating-buttons is removed as buttons are moved to the header */
+.floating-buttons {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 1001; /* Ensure it's above the sidebar */
+}
 
 .icon-button {
   background: #2a2a2a;

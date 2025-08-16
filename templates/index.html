@@ -27,15 +27,11 @@
     <!-- 主内容区域 -->
     <div class="main-content">
       <div class="chat-header">
-        <div class="header-left-buttons">
-          <button class="icon-button hamburger-button" onclick="toggleSidebar()">☰</button>
-          <button class="icon-button" onclick="createNewConversation()">+</button>
-        </div>
-        <div class="header-center-title">
+        <div class="chat-header-left">
           <div class="chat-title" id="currentChatTitle" contenteditable="true">新对话</div>
-        </div>
-        <div class="header-right-buttons">
-          <button id="deleteConversationBtn" class="action-button" title="删除当前对话"></button>
+          <div class="controls">
+            <button id="deleteConversationBtn" class="action-button" title="删除当前对话"></button>
+          </div>
         </div>
       </div>
       
@@ -69,7 +65,12 @@
     </div>
   </div>
 
-  <!-- 悬浮按钮区已被整合到聊天标题栏 -->
+  <!-- 悬浮按钮 -->
+  <div class="floating-buttons">
+    <button class="icon-button hamburger-button" onclick="toggleSidebar()">☰</button>
+    <button class="icon-button" onclick="createNewConversation()">+</button>
+  </div>
+
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
