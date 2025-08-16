@@ -161,12 +161,16 @@
     
     .chat-header-left {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 5px;
     }
     
     .chat-title {
       color: #8b8b8b;
       font-size: 1.1rem;
-      margin-bottom: 15px;
+      margin-bottom: 0; /* Use gap in parent instead */
     }
     
     .chat-title[contenteditable="true"] {
@@ -349,6 +353,14 @@
       border-color: #666;
       background: rgba(255, 255, 255, 0.03);
     }
+
+    #deleteConversationBtn {
+      padding: 2px;
+    }
+    #deleteConversationBtn svg {
+      width: 14px;
+      height: 14px;
+    }
     
     .delete-message {
       background: none;
@@ -359,28 +371,28 @@
       padding: 4px 8px;
       border-radius: 4px;
       transition: all 0.2s ease;
-      opacity: 0;
+      /* opacity: 0; */ /* Removed to make it always visible */
     }
     
+    /*
     .message:hover .delete-message {
       opacity: 1;
     }
+    */
     
     .delete-message:hover {
       color: #ff6b6b;
       background: rgba(255, 107, 107, 0.1);
     }
     
-    .pre-input-actions {
-      display: flex;
-      justify-content: flex-end;
-      padding: 0 20px 10px;
+    .clear-context-container {
+      text-align: center;
+      padding: 20px 0 0;
     }
 
     /* 输入区域 */
     .input-container {
-      padding: 20px;
-      padding-top: 10px; /* Adjust top padding to account for the new element */
+      padding: 10px 20px; /* Reduced vertical padding */
       background: #1a1a1a;
       border-top: 1px solid #333;
       flex-shrink: 0; /* Prevents the input area from shrinking */
@@ -395,14 +407,14 @@
     
     .message-input {
       flex: 1 1 400px;
-      padding: 15px;
+      padding: 10px 15px; /* Reduced vertical padding */
       border: 1px solid #444;
       border-radius: 12px;
       background: #2a2a2a;
       color: #e0e0e0;
       font-size: 16px; /* Prevents iOS auto-zoom on focus */
       resize: vertical;
-      min-height: 60px;
+      min-height: 24px; /* Reduced min-height */
       max-height: 200px;
       font-family: inherit;
       line-height: 1.5;
@@ -659,12 +671,12 @@
       
       <div class="chat-container" id="chatContainer">
         <!-- 聊天消息将在这里动态生成 -->
+        <div id="clearContextWrapper" class="clear-context-container" style="display: none;">
+          <button class="clear-context-btn" onclick="clearContext()">清除上下文</button>
+        </div>
       </div>
       
       <div class="input-container">
-        <div class="pre-input-actions">
-          <button class="clear-context-btn" onclick="clearContext()">清除上下文</button>
-        </div>
         <div class="input-area">
           <textarea 
             id="messageInput" 
@@ -826,6 +838,29 @@
       }, 2000);
     }
 
+    function copyToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('文本已复制');
+        }).catch(() => showToast('复制失败'));
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'absolute';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showToast('文本已复制');
+        } catch (err) {
+          showToast('复制失败');
+        } finally {
+          document.body.removeChild(textArea);
+        }
+      }
+    }
+
     // --- 数据 & 对话管理 ---
 
     async function loadConversations() {
@@ -935,16 +970,21 @@
     // --- 消息渲染与操作 ---
 
     function renderMessages(messages, contextStartId) {
+      const clearWrapper = document.getElementById('clearContextWrapper');
       chatContainer.innerHTML = '';
+      chatContainer.appendChild(clearWrapper);
+
       messages.forEach(message => {
         addMessageToChat(message.role, message.content, message.time, message.id, message.model, currentConversationId);
         if (contextStartId && message.id === contextStartId) {
           const divider = document.createElement('div');
           divider.className = 'context-divider';
           divider.innerHTML = '<div class="divider-line"></div><div class="divider-text">上下文已清除</div>';
-          chatContainer.appendChild(divider);
+          chatContainer.insertBefore(divider, clearWrapper);
         }
       });
+
+      clearWrapper.style.display = messages.length > 0 ? 'block' : 'none';
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     
@@ -986,13 +1026,7 @@
       const copyBtn = document.createElement('button');
       copyBtn.className = 'action-button';
       copyBtn.innerHTML = icons.copy;
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(content).then(() => {
-          showToast('文本已复制');
-        }, () => {
-          showToast('复制失败');
-        });
-      };
+      copyBtn.onclick = () => copyToClipboard(content);
       actions.appendChild(copyBtn);
 
       if (role === 'assistant') {
@@ -1011,7 +1045,7 @@
       }
       
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'action-button delete-message'; // Combine classes
+      deleteBtn.className = 'action-button delete-message';
       deleteBtn.innerHTML = icons.delete;
       deleteBtn.onclick = () => deleteMessage(messageId, messageDiv);
       
@@ -1022,7 +1056,9 @@
       messageDiv.appendChild(avatar);
       messageDiv.appendChild(contentDiv);
       
-      chatContainer.appendChild(messageDiv);
+      const clearWrapper = document.getElementById('clearContextWrapper');
+      chatContainer.insertBefore(messageDiv, clearWrapper);
+
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
@@ -1062,7 +1098,11 @@
       } finally {
         sendButton.disabled = false;
         sendButton.textContent = '发送';
-        messageInput.focus();
+        if (window.innerWidth <= 768) {
+          messageInput.blur();
+        } else {
+          messageInput.focus();
+        }
       }
     }
 
@@ -1081,7 +1121,7 @@
     }
 
     async function regenerateAssistantMessage(messageId, bubbleElement) {
-      const regenBtn = bubbleElement.closest('.message-content').querySelector('.action-button[title="重新生成"]'); // More specific selector
+      const regenBtn = bubbleElement.closest('.message-content').querySelector('.action-button[title="重新生成"]');
       try {
         if(regenBtn) regenBtn.disabled = true;
         const resp = await fetch(`/api/messages/${messageId}/regenerate`, { method: 'POST' });
