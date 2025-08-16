@@ -2,7 +2,7 @@ import os
 import json
 import sqlite3
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
@@ -442,7 +442,7 @@ def chat():
         "response": reply,
         "id": assistant_id,
         "user_id": user_id,
-        "time": datetime.now().isoformat(),
+        "time": datetime.now(timezone.utc).isoformat(),
         "model": model
     }
     
@@ -484,7 +484,7 @@ def regenerate_assistant_message(message_id):
         "success": True,
         "id": message_id,
         "response": new_reply,
-        "time": datetime.now().isoformat(),
+        "time": datetime.now(timezone.utc).isoformat(),
         "model": model,
     })
 
@@ -516,7 +516,7 @@ def edit_user_message(message_id):
         assistant_payload = {
             "id": assistant_id,
             "response": new_reply,
-            "time": datetime.now().isoformat(),
+            "time": datetime.now(timezone.utc).isoformat(),
             "model": model,
         }
     update_conversation_updated_at(conversation_id)
@@ -525,7 +525,7 @@ def edit_user_message(message_id):
         "user": {
             "id": message_id,
             "content": new_content,
-            "time": datetime.now().isoformat(),
+            "time": datetime.now(timezone.utc).isoformat(),
         },
         "assistant": assistant_payload
     })
