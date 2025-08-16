@@ -146,20 +146,31 @@ body {
 
 
 .chat-header {
-  padding: 20px;
+  padding: 10px 20px; /* Reduced padding for a shorter header */
   border-bottom: 1px solid #333;
   background: #1a1a1a;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center; /* Center items vertically */
+  gap: 15px;
 }
 
-.chat-header-left {
-  flex: 1;
+.header-left-placeholder, .header-right-buttons {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
+  justify-content: flex-end; /* Align content to the right for the right side */
+  flex: 1;
+}
+.header-left-placeholder {
+  justify-content: flex-start; /* Override for left side */
+}
+
+
+.header-center-title {
+  flex-grow: 2; /* Allow title to take more space */
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-title {
@@ -432,9 +443,10 @@ body {
 .floating-buttons {
   position: fixed;
   right: 20px;
-  top: 20px;
+  bottom: 90px; /* Positioned above the input area */
   display: flex;
-  gap: 10px;
+  flex-direction: column; /* Stack vertically */
+  gap: 15px;
   z-index: 1001; /* Ensure it's above the sidebar */
 }
 
