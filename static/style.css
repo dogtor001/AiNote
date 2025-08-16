@@ -605,7 +605,9 @@ body {
   border: 1px solid #444;
   border-radius: 8px;
   padding: 12px;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto; /* Keep scrollbar for users who prefer it, but wrapping will prevent layout breaking */
   font-family: 'Courier New', Courier, monospace;
   font-size: 14px;
 }
