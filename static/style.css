@@ -30,16 +30,17 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: left 0.3s ease; /* Use left for transition */
-  left: -160px; /* Hide off-screen */
+  transition: transform 0.3s ease;
+  transform: translateX(-100%);
   position: fixed;
+  left: 0;
   top: 0;
   height: 100vh;
   z-index: 1000;
 }
 
 .sidebar.show {
-  left: 0; /* Show on-screen */
+  transform: translateX(0);
 }
 
 .sidebar-header {
@@ -141,6 +142,8 @@ body {
   min-width: 0;
   height: var(--app-height); /* Ensure it takes full viewport height */
   transition: margin-left 0.3s ease;
+  position: relative; /* Establish stacking context */
+  z-index: 1; /* Ensure it's below the sidebar */
 }
 
 
