@@ -27,11 +27,15 @@
     <!-- 主内容区域 -->
     <div class="main-content">
       <div class="chat-header">
-        <div class="chat-header-left">
+        <div class="header-left-buttons">
+          <button class="icon-button hamburger-button" onclick="toggleSidebar()">☰</button>
+          <button class="icon-button" onclick="createNewConversation()">+</button>
+        </div>
+        <div class="header-center-title">
           <div class="chat-title" id="currentChatTitle" contenteditable="true">新对话</div>
-          <div class="controls">
-            <button id="deleteConversationBtn" class="action-button" title="删除当前对话"></button>
-          </div>
+        </div>
+        <div class="header-right-buttons">
+          <button id="deleteConversationBtn" class="action-button" title="删除当前对话"></button>
         </div>
       </div>
       
@@ -47,10 +51,11 @@
           <textarea 
             id="messageInput" 
             class="message-input"
-            placeholder="输入消息... (回车发送，Ctrl+Enter 换行)"
+            placeholder="输入消息..."
             autofocus
+            rows="1"
           ></textarea>
-          <div class="input-actions">
+          <div class="input-actions-stacked">
             <select id="modelSelector" class="model-selector">
               <option value="moonshotai/Kimi-K2-Instruct">Kimi K2</option>
               <option value="deepseek-ai/DeepSeek-R1">DeepSeek R1</option>
@@ -64,12 +69,7 @@
     </div>
   </div>
 
-  <!-- 悬浮按钮 -->
-  <div class="floating-buttons">
-    <button class="icon-button hamburger-button" onclick="toggleSidebar()">☰</button>
-    <button class="icon-button" onclick="createNewConversation()">+</button>
-  </div>
-
+  <!-- 悬浮按钮区已被整合到聊天标题栏 -->
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

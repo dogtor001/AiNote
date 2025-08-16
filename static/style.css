@@ -146,20 +146,28 @@ body {
 
 
 .chat-header {
-  padding: 20px;
+  padding: 10px 20px; /* Reduced padding for a shorter header */
   border-bottom: 1px solid #333;
   background: #1a1a1a;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center; /* Center items vertically */
+  gap: 15px;
 }
 
-.chat-header-left {
-  flex: 1;
+.header-left-buttons, .header-right-buttons {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
+  align-items: center;
+  gap: 10px;
+  flex: 0 1 auto; /* Don't grow, shrink if needed, base on content */
+}
+
+.header-center-title {
+  flex: 1 1 0; /* Grow and shrink to take available space */
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-title {
@@ -395,13 +403,13 @@ body {
 
 .input-area {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 10px;
-  align-items: stretch;
+  align-items: flex-end; /* Align items to the bottom */
 }
 
 .message-input {
-  /* flex: 1 1 400px; */ /* Removed to fix inconsistent height */
+  flex-grow: 1; /* Allow textarea to take up available space */
   padding: 10px 15px; /* Reduced vertical padding */
   border: 1px solid #444;
   border-radius: 12px;
@@ -422,21 +430,13 @@ body {
   box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.2);
 }
 
-.input-actions {
+.input-actions-stacked {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.floating-buttons {
-  position: fixed;
-  right: 20px;
-  top: 20px;
-  display: flex;
-  gap: 10px;
-  z-index: 1001; /* Ensure it's above the sidebar */
-}
+/* .floating-buttons is removed as buttons are moved to the header */
 
 .icon-button {
   background: #2a2a2a;

@@ -137,7 +137,7 @@ def get_conversation_messages(conversation_id):
     rows = c.fetchall()
     conn.close()
     
-    return [{"id": id, "role": role, "content": content, "time": timestamp, "model": model} 
+    return [{"id": id, "role": role, "content": content, "time": f"{timestamp}Z", "model": model}
             for id, role, content, timestamp, model in rows]
 
 def get_conversation_messages_with_context(conversation_id):
