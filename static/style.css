@@ -30,17 +30,16 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: transform 0.3s ease;
-  transform: translateX(-100%);
+  transition: left 0.3s ease; /* Use left for transition */
+  left: -160px; /* Hide off-screen */
   position: fixed;
-  left: 0;
   top: 0;
   height: 100vh;
   z-index: 1000;
 }
 
 .sidebar.show {
-  transform: translateX(0);
+  left: 0; /* Show on-screen */
 }
 
 .sidebar-header {
@@ -430,10 +429,11 @@ body {
   box-shadow: 0 0 0 2px rgba(102, 102, 102, 0.2);
 }
 
-.input-actions-stacked {
+.input-actions-row {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
 }
 
 /* .floating-buttons is removed as buttons are moved to the header */
