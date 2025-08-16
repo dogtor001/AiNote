@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ai Note</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -143,7 +145,7 @@
       flex-direction: column;
       background: #0f0f0f;
       min-width: 0;
-      margin-left: 0;
+      height: 100vh; /* Ensure it takes full viewport height */
       transition: margin-left 0.3s ease;
     }
     
@@ -259,7 +261,7 @@
     }
     
     .message.user .message-content {
-      text-align: right;
+      /* text-align: right; */ /* Removed for better readability */
     }
     
     .message-bubble {
@@ -306,8 +308,28 @@
     
     .message-actions {
       display: inline-flex;
-      gap: 6px;
+      gap: 10px; /* Increased gap for touch targets */
       align-items: center;
+    }
+
+    .toast-notification {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s ease, bottom 0.3s ease;
+      pointer-events: none; /* Allow clicks to pass through */
+    }
+
+    .toast-notification.show {
+      opacity: 1;
+      bottom: 50px;
     }
     
     .action-button {
@@ -349,11 +371,19 @@
       background: rgba(255, 107, 107, 0.1);
     }
     
+    .pre-input-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 20px 10px;
+    }
+
     /* 输入区域 */
     .input-container {
       padding: 20px;
+      padding-top: 10px; /* Adjust top padding to account for the new element */
       background: #1a1a1a;
       border-top: 1px solid #333;
+      flex-shrink: 0; /* Prevents the input area from shrinking */
     }
     
     .input-area {
@@ -370,7 +400,7 @@
       border-radius: 12px;
       background: #2a2a2a;
       color: #e0e0e0;
-      font-size: 14px;
+      font-size: 16px; /* Prevents iOS auto-zoom on focus */
       resize: vertical;
       min-height: 60px;
       max-height: 200px;
@@ -398,7 +428,7 @@
       top: 20px;
       display: flex;
       gap: 10px;
-      z-index: 1000;
+      z-index: 1001; /* Ensure it's above the sidebar */
     }
     
     .icon-button {
@@ -517,6 +547,14 @@
         flex-direction: column;
         align-items: stretch;
       }
+
+      .message-input {
+        min-height: 0;
+        max-height: 100px; /* More suitable for mobile */
+        resize: none;
+        padding: 10px 15px;
+        line-height: 1.4;
+      }
     }
     
     @media (max-width: 640px) {
@@ -538,6 +576,12 @@
       }
     }
 
+    @media (hover: none) {
+      .conversation-item:hover {
+        background: none;
+      }
+    }
+
     @media (min-width: 901px) {
       .sidebar {
         position: relative;
@@ -546,6 +590,43 @@
       .hamburger-button {
         display: none;
       }
+    }
+
+    /* Markdown Styles */
+    .message-bubble pre {
+      background-color: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+    }
+
+    .message-bubble code {
+      background-color: #2b2b2b;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.9em;
+    }
+
+    .message-bubble pre code {
+      background-color: transparent;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+    }
+
+    .message-bubble blockquote {
+      border-left: 3px solid #555;
+      padding-left: 15px;
+      margin-left: 0;
+      color: #b0b0b0;
+    }
+
+    .message-bubble ul, .message-bubble ol {
+      padding-left: 20px;
     }
   </style>
 </head>
@@ -571,7 +652,7 @@
         <div class="chat-header-left">
           <div class="chat-title" id="currentChatTitle" contenteditable="true">新对话</div>
           <div class="controls">
-            <!-- 已移除顶部的模型选择器和清除上下文按钮 -->
+            <button id="deleteConversationBtn" class="action-button" title="删除当前对话"></button>
           </div>
         </div>
       </div>
@@ -581,6 +662,9 @@
       </div>
       
       <div class="input-container">
+        <div class="pre-input-actions">
+          <button class="clear-context-btn" onclick="clearContext()">清除上下文</button>
+        </div>
         <div class="input-area">
           <textarea 
             id="messageInput" 
@@ -595,7 +679,6 @@
               <option value="zai-org/GLM-4.5">GLM 4.5</option>
               <option value="Qwen/Qwen3-235B-A22B-Instruct-2507">Qwen 3.5</option>
             </select>
-            <button class="clear-context-btn" onclick="clearContext()">清除上下文</button>
             <button id="sendButton" class="send-button">发送</button>
           </div>
         </div>
@@ -610,12 +693,12 @@
   </div>
 
   <script>
-    // 全局变量
+    // --- 全局变量 ---
     let currentConversationId = null;
     let conversations = [];
     let sidebarVisible = false;
 
-    // DOM 元素
+    // --- DOM 元素 ---
     const conversationsList = document.getElementById('conversationsList');
     const chatContainer = document.getElementById('chatContainer');
     const messageInput = document.getElementById('messageInput');
@@ -625,28 +708,37 @@
     const sidebar = document.getElementById('sidebar');
     const mainContent = document.querySelector('.main-content');
 
-    // 初始化
+    // --- SVG 图标 ---
+    const icons = {
+      copy: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+      regenerate: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>`,
+      edit: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`,
+      delete: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`
+    };
+
+    // --- 初始化 ---
     document.addEventListener('DOMContentLoaded', async () => {
       await loadConversations();
       if (conversations.length > 0) {
-        const lastConversation = conversations[0];
-        currentConversationId = lastConversation.id;
+        currentConversationId = conversations[0].id;
       } else {
         await createNewConversation(false);
       }
-
       if (currentConversationId) {
         await loadCurrentConversation();
       }
-
       renderConversationsList();
       setupEventListeners();
-      checkLayout(); // Initial layout check
+      checkLayout();
     });
 
-    // 设置事件监听器
+    // --- 事件监听器 ---
     function setupEventListeners() {
       sendButton.onclick = sendMessage;
+
+      const deleteConvBtn = document.getElementById('deleteConversationBtn');
+      deleteConvBtn.innerHTML = icons.delete;
+      deleteConvBtn.onclick = () => deleteConversation(currentConversationId);
 
       mainContent.addEventListener('click', () => {
         if (window.innerWidth <= 900 && sidebarVisible) {
@@ -657,41 +749,34 @@
 
       window.addEventListener('resize', checkLayout);
 
-      messageInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
-          event.preventDefault();
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+          e.preventDefault();
           sendMessage();
-        }
-        if (event.key === 'Enter' && event.ctrlKey) {
-          event.preventDefault();
-          const start = messageInput.selectionStart;
-          const end = messageInput.selectionEnd;
-          messageInput.value = messageInput.value.substring(0, start) + '\n' + messageInput.value.substring(end);
-          messageInput.selectionStart = messageInput.selectionEnd = start + 1;
-          messageInput.dispatchEvent(new Event('input'));
         }
       });
 
-      currentChatTitle.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          currentChatTitle.blur();
-        }
+      currentChatTitle.addEventListener('click', () => {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(currentChatTitle);
+        selection.removeAllRanges();
+        selection.addRange(range);
       });
 
       currentChatTitle.addEventListener('blur', async () => {
         const newTitle = currentChatTitle.textContent.trim();
         const current = conversations.find(c => c.id === currentConversationId);
         if (!current || !newTitle || newTitle === current.title) return;
+
         try {
           const resp = await fetch(`/api/conversations/${currentConversationId}/title`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: newTitle })
           });
-          if (resp.ok) {
-            await loadConversations();
-          } else {
+          if (resp.ok) await loadConversations();
+          else {
             alert('标题更新失败');
             currentChatTitle.textContent = current.title;
           }
@@ -707,33 +792,42 @@
       });
     }
 
-    // 响应式布局检查
+    // --- UI & 布局 ---
+
     function checkLayout() {
       const isWide = window.innerWidth > 900;
       if (isWide) {
         sidebarVisible = true;
         updateSidebarVisibility();
       }
-      // On narrow screens, we let the user control the visibility.
     }
 
-    // 切换侧边栏
     function toggleSidebar() {
-      if (window.innerWidth > 900) return; // Disabled on wide screens
+      if (window.innerWidth > 900) return;
       sidebarVisible = !sidebarVisible;
       updateSidebarVisibility();
     }
 
-    // 更新侧边栏DOM
     function updateSidebarVisibility() {
-      if (sidebarVisible) {
-        sidebar.classList.add('show');
-      } else {
-        sidebar.classList.remove('show');
-      }
+      sidebar.classList.toggle('show', sidebarVisible);
     }
 
-    // 加载对话列表
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => toast.classList.add('show'), 10);
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+      }, 2000);
+    }
+
+    // --- 数据 & 对话管理 ---
+
     async function loadConversations() {
       try {
         const response = await fetch('/api/conversations');
@@ -744,7 +838,6 @@
       }
     }
 
-    // 渲染对话列表
     function renderConversationsList() {
       conversationsList.innerHTML = '';
       conversations.forEach(conversation => {
@@ -761,14 +854,12 @@
           <div class="conversation-title">${conversation.title}</div>
           <div class="conversation-meta">
             <span>${conversation.message_count} 条消息</span>
-            <button class="delete-conversation" onclick="deleteConversation(${conversation.id}, event)">×</button>
           </div>
         `;
         conversationsList.appendChild(item);
       });
     }
 
-    // 切换对话
     async function switchConversation(conversationId) {
       if (currentConversationId === conversationId) return;
       currentConversationId = conversationId;
@@ -776,7 +867,6 @@
       await loadCurrentConversation();
     }
 
-    // 加载当前对话
     async function loadCurrentConversation() {
       if (!currentConversationId) {
         chatContainer.innerHTML = '<div class="loading-indicator">没有选择对话</div>';
@@ -795,7 +885,6 @@
       }
     }
 
-    // 创建新对话
     async function createNewConversation(switchToNew = true) {
       try {
         const response = await fetch('/api/conversations', {
@@ -809,7 +898,6 @@
           currentConversationId = newConversation.id;
           renderConversationsList();
           await loadCurrentConversation();
-          messageInput.focus();
           if (window.innerWidth <= 900) {
             sidebarVisible = false;
             updateSidebarVisibility();
@@ -821,9 +909,7 @@
       }
     }
 
-    // 删除对话
-    async function deleteConversation(conversationId, event) {
-      event.stopPropagation();
+    async function deleteConversation(conversationId) {
       if (!confirm('确定要删除这个对话吗？此操作不可恢复！')) return;
       try {
         const response = await fetch(`/api/conversations/${conversationId}`, { method: 'DELETE' });
@@ -836,7 +922,7 @@
               currentConversationId = conversations[newIndex].id;
             } else {
               await createNewConversation();
-              return; // createNewConversation will handle the reload
+              return;
             }
             await loadCurrentConversation();
           }
@@ -846,7 +932,8 @@
       }
     }
 
-    // 渲染消息
+    // --- 消息渲染与操作 ---
+
     function renderMessages(messages, contextStartId) {
       chatContainer.innerHTML = '';
       messages.forEach(message => {
@@ -861,7 +948,6 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     
-    // 添加消息到UI
     function addMessageToChat(role, content, time, messageId, model, conversationId) {
       if (conversationId !== currentConversationId) return;
 
@@ -878,7 +964,11 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.textContent = content;
+      if (role === 'assistant') {
+        bubble.innerHTML = DOMPurify.sanitize(marked.parse(content || ''));
+      } else {
+        bubble.textContent = content;
+      }
 
       const infoDiv = document.createElement('div');
       infoDiv.className = 'message-info';
@@ -889,33 +979,40 @@
         timeSpan.textContent = formatTime(time);
         infoDiv.appendChild(timeSpan);
       }
-      if (model && role === 'assistant') {
-        const modelSpan = document.createElement('span');
-        modelSpan.className = 'message-model';
-        modelSpan.textContent = `(${model.split('/').pop()})`;
-        infoDiv.appendChild(modelSpan);
-      }
       
       const actions = document.createElement('span');
       actions.className = 'message-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'action-button';
+      copyBtn.innerHTML = icons.copy;
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(content).then(() => {
+          showToast('文本已复制');
+        }, () => {
+          showToast('复制失败');
+        });
+      };
+      actions.appendChild(copyBtn);
+
       if (role === 'assistant') {
         const regenBtn = document.createElement('button');
         regenBtn.className = 'action-button';
-        regenBtn.textContent = '重新生成';
+        regenBtn.innerHTML = icons.regenerate;
         regenBtn.onclick = () => regenerateAssistantMessage(messageId, bubble);
         actions.appendChild(regenBtn);
       }
       if (role === 'user') {
         const editBtn = document.createElement('button');
         editBtn.className = 'action-button';
-        editBtn.textContent = '编辑';
-        editBtn.onclick = () => editUserMessage(messageId, bubble);
+        editBtn.innerHTML = icons.edit;
+        editBtn.onclick = () => editUserMessage(messageId, bubble, content);
         actions.appendChild(editBtn);
       }
       
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'delete-message';
-      deleteBtn.textContent = '删除';
+      deleteBtn.className = 'action-button delete-message'; // Combine classes
+      deleteBtn.innerHTML = icons.delete;
       deleteBtn.onclick = () => deleteMessage(messageId, messageDiv);
       
       infoDiv.appendChild(actions);
@@ -929,7 +1026,6 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
-    // 发送消息
     async function sendMessage() {
       const message = messageInput.value.trim();
       if (!message) return;
@@ -953,13 +1049,13 @@
           })
         });
         
+        const data = await response.json();
         if (response.ok) {
-          const data = await response.json();
           addMessageToChat('user', message, new Date().toISOString(), data.user_id, model, conversationIdForRequest);
           addMessageToChat('assistant', data.response, data.time, data.id, data.model, conversationIdForRequest);
           await loadConversations();
         } else {
-          addMessageToChat('assistant', '发送失败，请重试', new Date().toISOString(), -1, model, conversationIdForRequest);
+          addMessageToChat('assistant', data.error || '发送失败，请重试', new Date().toISOString(), -1, model, conversationIdForRequest);
         }
       } catch (error) {
         addMessageToChat('assistant', '网络错误: ' + error.message, new Date().toISOString(), -1, model, conversationIdForRequest);
@@ -970,12 +1066,9 @@
       }
     }
 
-    // 清除上下文 (无确认)
     async function clearContext() {
       try {
-        const response = await fetch(`/api/conversations/${currentConversationId}/clear-context`, {
-          method: 'POST'
-        });
+        const response = await fetch(`/api/conversations/${currentConversationId}/clear-context`, { method: 'POST' });
         if (response.ok) {
           await loadConversations();
           await loadCurrentConversation();
@@ -987,16 +1080,14 @@
       }
     }
 
-    // 其他辅助函数...
     async function regenerateAssistantMessage(messageId, bubbleElement) {
-      const regenBtn = bubbleElement.closest('.message-content').querySelector('.action-button');
+      const regenBtn = bubbleElement.closest('.message-content').querySelector('.action-button[title="重新生成"]'); // More specific selector
       try {
-        regenBtn.disabled = true;
-        regenBtn.textContent = '生成中...';
+        if(regenBtn) regenBtn.disabled = true;
         const resp = await fetch(`/api/messages/${messageId}/regenerate`, { method: 'POST' });
         const data = await resp.json();
         if (data.success) {
-          bubbleElement.textContent = data.response;
+          bubbleElement.innerHTML = DOMPurify.sanitize(marked.parse(data.response || ''));
           await loadConversations();
         } else {
           alert('重新生成失败：' + (data.error || '未知错误'));
@@ -1004,22 +1095,19 @@
       } catch (e) {
         alert('重新生成失败：' + e.message);
       } finally {
-        regenBtn.disabled = false;
-        regenBtn.textContent = '重新生成';
+        if(regenBtn) regenBtn.disabled = false;
       }
     }
 
-    async function editUserMessage(messageId, bubbleElement) {
-       const editBtn = bubbleElement.closest('.message-content').querySelector('.action-button');
-       const original = bubbleElement.textContent;
-       const edited = prompt('编辑你的消息：', original);
-       if (edited === null || edited.trim() === original) return;
+    async function editUserMessage(messageId, bubbleElement, originalContent) {
+       const editBtn = bubbleElement.closest('.message-content').querySelector('.action-button[title="编辑"]');
+       const edited = prompt('编辑你的消息：', originalContent);
+       if (edited === null || edited.trim() === originalContent) return;
        const newText = edited.trim();
        if (!newText) { alert('内容不能为空'); return; }
 
        try {
-         editBtn.disabled = true;
-         editBtn.textContent = '保存中...';
+         if(editBtn) editBtn.disabled = true;
          const resp = await fetch(`/api/messages/${messageId}/edit`, {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
@@ -1030,16 +1118,16 @@
            bubbleElement.textContent = data.user.content;
            if (data.assistant) {
              await loadCurrentConversation();
+           } else {
+             await loadConversations();
            }
-           await loadConversations();
          } else {
            alert('保存失败：' + (data.error || '未知错误'));
          }
        } catch (e) {
          alert('编辑失败：' + e.message);
        } finally {
-         editBtn.disabled = false;
-         editBtn.textContent = '编辑';
+         if(editBtn) editBtn.disabled = false;
        }
     }
 
@@ -1060,6 +1148,7 @@
       if (!timestamp) return '';
       const date = new Date(timestamp);
       return date.toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
