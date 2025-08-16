@@ -443,7 +443,7 @@ body {
 .floating-buttons {
   position: fixed;
   right: 20px;
-  bottom: 90px; /* Positioned above the input area */
+  bottom: 110px; /* Positioned above the input area */
   display: flex;
   flex-direction: column; /* Stack vertically */
   gap: 15px;
